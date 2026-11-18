@@ -8,10 +8,9 @@ app = FastAPI(
     description="Multi-tenant document approval platform.",
 )
 
-# Allow the React frontend to talk to the backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"], # The Vite dev server
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
