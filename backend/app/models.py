@@ -1,41 +1,70 @@
+import enum
 import datetime
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum
 from sqlalchemy.orm import relationship
-from app.db.db import Base
+from app.db.session import Base
+
+class UserRole(str, enum.Enum):
+    OWNER = "owner"
+    REVIEWER = "reviewer"
+    EMPLOYEE = "employee"
+
+class DocumentStatus(str, enum.Enum):
+    DRAFT = "draft"
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 class Organization(Base):
     __tablename__ = "organizations"
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
     users = relationship("User", back_populates="organization")
     documents = relationship("Document", back_populates="organization")
 
 class User(Base):
     __tablename__ = "users"
-
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
-    role = Column(String, nullable=False)  # 'owner', 'reviewer', 'employee'
-    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
-
+    role = Column(Enum(UserRole), default=UserRole.EMPLOYEE, nullable=False)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
     organization = relationship("Organization", back_populates="users")
-    documents = relationship("Document", back_populates="owner")
 
 class Document(Base):
     __tablename__ = "documents"
-
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    file_path = Column(String, nullable=False)
-    version = Column(Integer, default=1, nullable=False)
-    status = Column(String, default="Draft", nullable=False)  # Draft, Pending Review, Approved, Rejected
+    title = Column(String, index=True, nullable=False)
+    status = Column(Enum(DocumentStatus), default=DocumentStatus.DRAFT, nullable=False)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
     organization = relationship("Organization", back_populates="documents")
-    owner = relationship("User", back_populates="documents")
+    owner = relationship("User")
+    versions = relationship("DocumentVersion", back_populates="document", cascade="all, delete-orphan")
+    audit_logs = relationship("AuditLog", back_populates="document", cascade="all, delete-orphan")
+
+class DocumentVersion(Base):
+    __tablename__ = "document_versions"
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    version_number = Column(Integer, nullable=False)
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    uploaded_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    document = relationship("Document", back_populates="versions")
+    uploaded_by = relationship("User")
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    action = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    document = relationship("Document", back_populates="audit_logs")
+    user = relationship("User")
